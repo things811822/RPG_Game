@@ -4,25 +4,206 @@ import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy,
-    QFrame, QSpacerItem, QScrollArea
+    QFrame, QSpacerItem, QScrollArea, QDialog
 )
-from PyQt6.QtCore import Qt, QTimer, QTime
-from PyQt6.QtGui import QKeyEvent, QFont, QColor, QLinearGradient, QPalette, QBrush
+from PyQt6.QtCore import Qt, QTimer, QTime, QPoint
+from PyQt6.QtGui import QKeyEvent, QFont, QColor, QLinearGradient, QPalette, QBrush, QPainter
 
+from src.ui.skill_dialog import SkillDialog
 from .player import Player
-from .map import GameMap, EnemySpot, ItemSpot
+from .map import GameMap
 from .battle import Enemy
 from .ui.first_person_view import FirstPersonView
 from .ui.minimap_widget import MinimapWidget
 from .ui.enemy_ui import EnemyUI
 from .ui.inventory_dialog import InventoryDialog
-from .systems.skills import Skill
-from .systems.items import Item
+from .systems.skills import create_skills
+from .systems.items import create_items
+from .systems.monsters import create_monster
+
+DEV_MODE_ENABLED = False  # 将此设置为 True 以启用开发者模式
+
+class CheatMenu(QDialog):
+    """修复中文显示问题的作弊菜单"""
+    def __init__(self, game, parent=None):
+        super().__init__(parent)
+        self.game = game
+        self.setWindowTitle("作弊菜单")
+        # 设置窗口标志：确保在所有窗口之上
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
+                           Qt.WindowType.WindowStaysOnTopHint | 
+                           Qt.WindowType.Tool)
+        
+        # 设置全局字体
+        font = QFont("Microsoft YaHei", 9)
+        self.setFont(font)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: rgba(30, 30, 40, 0.95);
+                border: 2px solid #ffcc00;
+                border-radius: 8px;
+            }
+            QLabel {
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton {
+                background-color: #4a6fa5;
+                color: white;
+                border: 1px solid #3a5a80;
+                padding: 8px;
+                margin: 5px;
+                font-size: 12px;
+                border-radius: 4px;
+                min-height: 30px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: #5a7fb5;
+            }
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(8)
+        
+        # 标题
+        title = QLabel("🎮 开发者作弊菜单")
+        title.setStyleSheet("color: #ffcc00; font-size: 16px; font-weight: bold;")
+        title.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
+        layout.addWidget(title)
+        
+        # 作弊选项
+        cheats = [
+            ("一键跳关", self.skip_level),
+            ("清空敌人", self.clear_enemies),
+            ("完全恢复", self.full_heal),
+            ("最大MP", self.max_mp),
+            ("添加道具", self.add_items),
+            ("无限技能", self.infinite_skills),
+            ("传送地图", self.teleport_map),
+            ("添加Boss", self.add_boss),
+            ("无敌模式", self.toggle_god_mode)
+        ]
+        
+        # 创建按钮并设置字体
+        for text, func in cheats:
+            btn = QPushButton(text)
+            btn.setFont(QFont("Microsoft YaHei", 10))
+            btn.setStyleSheet("background-color: #3a4a6a;")
+            btn.setMinimumHeight(35)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(func)
+            layout.addWidget(btn)
+        
+        # 关闭按钮
+        close_btn = QPushButton("❌ 关闭")
+        close_btn.setFont(QFont("Microsoft YaHei", 10, QFont.Weight.Bold))
+        close_btn.setStyleSheet("background-color: #a03030; margin-top: 15px;")
+        close_btn.setMinimumHeight(35)
+        close_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+        
+        # 设置大小
+        self.setFixedSize(340, 480)
+        
+        # 默认隐藏
+        self.setVisible(False)
+    
+    def position_at_center(self):
+        """将窗口定位到屏幕中央，确保在所有窗口之上"""
+        screen = self.screen()
+        screen_geometry = screen.geometry()
+        
+        # 计算屏幕中央位置
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        
+        # 确保不被任务栏遮挡
+        if y + self.height() > screen_geometry.height():
+            y = screen_geometry.height() - self.height() - 20
+            
+        # 确保窗口在最前
+        self.move(x, y)
+        self.raise_()
+        self.activateWindow()
+    
+    def skip_level(self):
+        """跳到下一关"""
+        self.game.current_level += 1
+        self.game.generate_new_map()
+        self.game.level_label.setText(f"关卡：{self.game.current_level}")
+        self.game.log_message(f"已跳到第 {self.game.current_level} 关")
+    
+    def clear_enemies(self):
+        """清空所有敌人"""
+        for enemy in self.game.game_map.enemies:
+            enemy.active = False
+        self.game.log_message("所有敌人已被清除")
+    
+    def full_heal(self):
+        """完全恢复HP"""
+        self.game.player.hp = self.game.player.max_hp
+        self.game.update_ui()
+        self.game.log_message("玩家HP已完全恢复")
+    
+    def max_mp(self):
+        """完全恢复MP"""
+        self.game.player.mp = self.game.player.max_mp
+        self.game.update_ui()
+        self.game.log_message("玩家MP已完全恢复")
+    
+    def add_items(self):
+        """添加所有道具"""
+        items = create_items()
+        for item in items:
+            self.game.player.inventory.append(item)
+        self.game.log_message("已添加所有道具到背包")
+    
+    def infinite_skills(self):
+        """无限技能（不消耗MP）"""
+        for skill in self.game.player.skills:
+            skill.mp_cost = 0
+        self.game.update_skill_buttons()
+        self.game.log_message("技能MP消耗已设为0")
+    
+    def teleport_map(self):
+        """传送到地图任意位置"""
+        # 简单实现：传送到地图中心
+        size = self.game.game_map.size
+        center_x = size // 2
+        center_y = size // 2
+        
+        # 找到最近的空地
+        for r in range(5):
+            for dx in range(-r, r+1):
+                for dy in range(-r, r+1):
+                    x, y = center_x + dx, center_y + dy
+                    if 1 <= x < size-1 and 1 <= y < size-1 and not self.game.game_map.is_wall(x, y):
+                        self.game.game_map.player_x = float(x)
+                        self.game.game_map.player_y = float(y)
+                        self.game.update_ui()
+                        self.game.log_message(f"已传送到 ({x}, {y})")
+                        return
+    
+    def add_boss(self):
+        """添加Boss到当前地图"""
+        self.game.game_map.add_boss()
+        self.game.log_message("Boss已添加到地图")
+    
+    def toggle_god_mode(self):
+        """切换无敌模式"""
+        self.game.god_mode = not getattr(self.game, 'god_mode', False)
+        status = "开启" if self.game.god_mode else "关闭"
+        self.game.log_message(f"无敌模式已{status}")
 
 class RPGGame(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PyQt6 RPG 冒险 - 小键盘直接渲染")
+        self.setWindowTitle("PyQt6 RPG 冒险 - 完整系统")
         self.resize(1400, 800)
         
         # 设置深色主题
@@ -30,10 +211,10 @@ class RPGGame(QMainWindow):
         
         # 主要游戏对象
         self.player = Player()
-        self.game_map = GameMap()
         self.current_level = 1
         self.in_battle = False
         self.current_enemy = None
+        self.god_mode = False  # 无敌模式
         
         # 控制相关
         self.keys_pressed = {'w': False, 'a': False, 's': False, 'd': False}
@@ -41,6 +222,12 @@ class RPGGame(QMainWindow):
         self.last_move_time = 0
         self.move_cooldown = 100
         self.player_dir = 0  # 0: North, 90: East, 180: South, 270: West
+        
+        # 生成初始地图
+        self.game_map = GameMap(level=self.current_level)
+        
+        # 开发者模式
+        self.cheat_menu = CheatMenu(self, self) if DEV_MODE_ENABLED else None
         
         # 设置中心部件
         central = QWidget()
@@ -94,6 +281,9 @@ class RPGGame(QMainWindow):
         self.pickup_btn.setEnabled(False)
         self.pickup_btn.setStyleSheet("padding: 8px;")
         
+        self.skill_btn = QPushButton("✨ 技能")
+        self.skill_btn.setStyleSheet("padding: 8px;")
+        
         # 战斗专用按钮（初始隐藏）
         self.combat_frame = QFrame()
         self.combat_frame.setStyleSheet("background-color: #3a2a2a; border-radius: 8px; border: 1px solid #662222;")
@@ -110,14 +300,10 @@ class RPGGame(QMainWindow):
         self.attack_btn = QPushButton("⚔️ 攻击")
         self.item_btn = QPushButton("🧪 道具")
         self.flee_btn = QPushButton("🏃 逃跑")
-        self.skill1_btn = QPushButton()
-        self.skill2_btn = QPushButton()
         
-        combat_btn_layout.addWidget(self.attack_btn, 0, 0)
-        combat_btn_layout.addWidget(self.item_btn, 0, 1)
-        combat_btn_layout.addWidget(self.flee_btn, 1, 0, 1, 2)
-        combat_btn_layout.addWidget(self.skill1_btn, 2, 0)
-        combat_btn_layout.addWidget(self.skill2_btn, 2, 1)
+        combat_btn_layout.addWidget(self.attack_btn, 0, 0, 1, 2)
+        combat_btn_layout.addWidget(self.item_btn, 1, 0)
+        combat_btn_layout.addWidget(self.flee_btn, 1, 1)
         combat_layout.addLayout(combat_btn_layout)
         
         # 敌人UI（初始隐藏）
@@ -127,6 +313,7 @@ class RPGGame(QMainWindow):
         # 添加到交互区域
         action_layout.addWidget(self.inventory_btn)
         action_layout.addWidget(self.pickup_btn)
+        action_layout.addWidget(self.skill_btn)
         action_layout.addWidget(self.combat_frame)
         action_layout.addWidget(self.enemy_ui)
         
@@ -152,7 +339,7 @@ class RPGGame(QMainWindow):
         hint_layout = QVBoxLayout(hint_frame)
         hint_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.move_hint = QLabel("移动：WASD | 视角：小键盘方向键")
+        self.move_hint = QLabel("移动：WASD | 视角：IJKL")
         self.move_hint.setStyleSheet("font-size: 12px; color: #aaa;")
         self.move_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -172,11 +359,10 @@ class RPGGame(QMainWindow):
         # 信号连接
         self.inventory_btn.clicked.connect(self.open_inventory)
         self.pickup_btn.clicked.connect(self.pickup_item)
+        self.skill_btn.clicked.connect(self.open_skill_menu)
         self.attack_btn.clicked.connect(self.player_attack)
         self.item_btn.clicked.connect(self.show_item_selection)
         self.flee_btn.clicked.connect(self.flee_battle)
-        self.skill1_btn.clicked.connect(lambda: self.use_skill(0))
-        self.skill2_btn.clicked.connect(lambda: self.use_skill(1))
 
         # 设置定时器
         self.move_timer = QTimer()
@@ -206,6 +392,12 @@ class RPGGame(QMainWindow):
         
         self.setPalette(palette)
 
+    def generate_new_map(self):
+        """生成新地图"""
+        self.game_map = GameMap(level=self.current_level)
+        self.fp_view.game_map = self.game_map
+        self.minimap.game_map = self.game_map
+
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
         
@@ -213,6 +405,15 @@ class RPGGame(QMainWindow):
         if self.in_battle:
             if key == Qt.Key.Key_Escape:
                 self.close()
+            return
+        
+        # 开发者模式快捷键
+        if DEV_MODE_ENABLED and key == Qt.Key.Key_F1:
+            if self.cheat_menu:
+                self.cheat_menu.setVisible(not self.cheat_menu.isVisible())
+                if self.cheat_menu.isVisible():
+                    self.cheat_menu.position_at_center()
+            event.accept()
             return
         
         # 移动控制（WASD只移动，不改变视角方向）
@@ -225,21 +426,21 @@ class RPGGame(QMainWindow):
         elif key == Qt.Key.Key_A:
             self.keys_pressed['a'] = True
         
-        # 视角控制（小键盘方向键）- 直接重新渲染
-        elif key == Qt.Key.Key_Up:
+        # 视角控制（IJKL键）- 直接重新渲染
+        elif key == Qt.Key.Key_I:
             self.set_view_direction_immediate(0)  # 北
             event.accept()
             return
-        elif key == Qt.Key.Key_Right:
-            self.set_view_direction_immediate(90)  # 东
+        elif key == Qt.Key.Key_J:
+            self.set_view_direction_immediate(270)  # 西
             event.accept()
             return
-        elif key == Qt.Key.Key_Down:
+        elif key == Qt.Key.Key_K:
             self.set_view_direction_immediate(180)  # 南
             event.accept()
             return
-        elif key == Qt.Key.Key_Left:
-            self.set_view_direction_immediate(270)  # 西
+        elif key == Qt.Key.Key_L:
+            self.set_view_direction_immediate(90)  # 东
             event.accept()
             return
         
@@ -256,7 +457,11 @@ class RPGGame(QMainWindow):
             event.accept()
             return
         elif key == Qt.Key.Key_Escape:
-            self.close()
+            # 退出作弊菜单
+            if self.cheat_menu and self.cheat_menu.isVisible():
+                self.cheat_menu.setVisible(False)
+            else:
+                self.close()
             event.accept()
             return
         
@@ -286,7 +491,7 @@ class RPGGame(QMainWindow):
         self.minimap.render()
 
     def process_movement(self):
-        """处理WASD移动逻辑"""
+        """处理WASD移动逻辑（基于小地图方向）"""
         if self.in_battle:
             return
             
@@ -295,21 +500,16 @@ class RPGGame(QMainWindow):
             return
             
         dx, dy = 0, 0
-        rad = math.radians(self.player_dir)
         
-        # 根据当前视角方向移动（不改变视角方向）
+        # 基于小地图方向移动（上=W，下=S，左=A，右=D）
         if self.keys_pressed['w']:
-            dx += math.sin(rad)
-            dy += math.cos(rad)
-        if self.keys_pressed['d']:
-            dx += math.cos(rad)
-            dy -= math.sin(rad)
+            dy -= self.move_speed
         if self.keys_pressed['s']:
-            dx -= math.sin(rad)
-            dy -= math.cos(rad)
+            dy += self.move_speed
         if self.keys_pressed['a']:
-            dx -= math.cos(rad)
-            dy += math.sin(rad)
+            dx -= self.move_speed
+        if self.keys_pressed['d']:
+            dx += self.move_speed
         
         # 归一化
         length = math.sqrt(dx*dx + dy*dy)
@@ -317,7 +517,7 @@ class RPGGame(QMainWindow):
             dx = dx / length * self.move_speed
             dy = dy / length * self.move_speed
         
-        # 执行移动（不改变视角方向）
+        # 执行移动
         if dx != 0 or dy != 0:
             if self.game_map.move_player(dx, dy):
                 self.check_pickup_available()
@@ -351,18 +551,35 @@ class RPGGame(QMainWindow):
         dist_to_exit = math.sqrt((px - exit_x)**2 + (py - exit_y)**2)
         
         if dist_to_exit < 1.5:
+            # 检查是否有boss
+            if self.game_map.boss_present:
+                self.log_message("请先击败boss再进入下一关！")
+                return
+            
+            # 检查是否有敌人
             if any(e.active for e in self.game_map.enemies):
                 self.log_message("还有敌人未被击败！请清除所有敌人再进入下一关。")
                 return
-                
+            
+            # 检查是否有未拾取道具
+            remaining_items = [item for item in self.game_map.items if item.active]
+            if remaining_items:
+                reply = QMessageBox.question(self, "确认", 
+                                            f"还有 {len(remaining_items)} 个道具未拾取，确定要进入下一关吗？",
+                                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.No:
+                    return
+            
             self.current_level += 1
             QMessageBox.information(self, "关卡完成", f"你完成了第 {self.current_level - 1} 关！\n进入第 {self.current_level} 关……")
-            self.game_map = GameMap()
-            self.fp_view.game_map = self.game_map
-            self.minimap.game_map = self.game_map
+            self.generate_new_map()
             self.level_label.setText(f"关卡：{self.current_level}")
             self.player_dir = 0
             self.fp_view.player_dir = 0
+            
+            # 清除临时效果
+            self.player.clear_temp_effects()
+            
             self.update_ui()
 
     def update_ui(self):
@@ -378,28 +595,18 @@ class RPGGame(QMainWindow):
         else:
             self.fp_view.scene().clear()
             self.fp_view.scene().addText(f"⚔️ 与 {self.current_enemy.name} 战斗中！", QFont("Arial", 20))
+            # 战斗中更新敌人UI
+            self.enemy_ui.update_enemy(
+                self.current_enemy.name,
+                self.current_enemy.hp,
+                self.current_enemy.max_hp
+            )
 
-        self.update_skill_buttons()
         self.update_move_buttons()
         
         # 确保第一人称视图更新
         if not self.in_battle:
             self.fp_view.render_view()
-
-    def update_skill_buttons(self):
-        skills = self.player.skills
-        if len(skills) > 0:
-            s1 = skills[0]
-            self.skill1_btn.setText(f"✨ {s1.name} (MP:{s1.mp_cost})")
-            self.skill1_btn.setEnabled(s1.can_use(self.player))
-        else:
-            self.skill1_btn.hide()
-        if len(skills) > 1:
-            s2 = skills[1]
-            self.skill2_btn.setText(f"✨ {s2.name} (MP:{s2.mp_cost})")
-            self.skill2_btn.setEnabled(s2.can_use(self.player))
-        else:
-            self.skill2_btn.hide()
 
     def update_move_buttons(self):
         """动态更新UI可见性"""
@@ -416,34 +623,12 @@ class RPGGame(QMainWindow):
 
     def start_battle(self, enemy_type):
         self.in_battle = True
-        enemy_data = {
-            "goblin": ("哥布林", 30, 8, 2),
-            "skeleton": ("骷髅兵", 40, 12, 3),
-            "spider": ("巨蜘蛛", 50, 15, 1),
-            "orc": ("兽人", 60, 18, 4)
-        }
-        name, hp, atk, df = enemy_data[enemy_type]
-        self.current_enemy = Enemy(name, hp, atk, df)
-        self.enemy_ui.update_enemy(name, hp, hp)
+        # 根据类型获取敌人
+        self.current_enemy = create_monster(enemy_type)
         self.update_ui()
 
     def player_attack(self):
-        self._perform_action("普通攻击", lambda: self._damage_enemy(self.player.attack))
-
-    def use_skill(self, idx):
-        if idx >= len(self.player.skills):
-            return
-        skill = self.player.skills[idx]
-        if not skill.can_use(self.player):
-            self.log_message("魔法值不足！")
-            return
-        msg = skill.use(self.player, self.current_enemy)
-        self.log_message(msg)
-        self.update_enemy_ui()
-        if not self.current_enemy.is_alive():
-            self.end_battle(victory=True)
-            return
-        self.enemy_turn()
+        self._perform_action("普通攻击", lambda: self._damage_enemy(self.player.get_effective_attack()))
 
     def show_item_selection(self):
         """显示道具选择对话框"""
@@ -451,22 +636,18 @@ class RPGGame(QMainWindow):
             self.log_message("背包为空！")
             return
             
-        dialog = InventoryDialog(self.player.inventory, self)
-        if dialog.exec():
-            selected_item = dialog.selected_item
-            if selected_item:
-                self.use_selected_item(selected_item)
+        dialog = InventoryDialog(self.player.inventory, self.player, in_battle=self.in_battle, game=self)
+        if dialog.exec() and dialog.selected_item:
+            self.use_selected_item(dialog.selected_item)
 
     def use_selected_item(self, item):
         """使用选中的道具"""
-        if self.in_battle and item in self.player.inventory:
-            self.player.use_item(item)
-            self.log_message(f"使用了 {item.name}！")
-            self.enemy_turn()
-        elif not self.in_battle and item in self.player.inventory:
+        if item in self.player.inventory:
             self.player.use_item(item)
             self.log_message(f"使用了 {item.name}！")
             self.update_ui()
+            if self.in_battle:
+                self.enemy_turn()
 
     def _damage_enemy(self, dmg):
         self.current_enemy.hp -= dmg
@@ -477,30 +658,31 @@ class RPGGame(QMainWindow):
             return
         msg = action_func()
         self.log_message(msg)
-        self.update_enemy_ui()
+        self.update_ui()
         if not self.current_enemy.is_alive():
             self.end_battle(victory=True)
             return
         self.enemy_turn()
-
-    def update_enemy_ui(self):
-        if self.current_enemy:
-            self.enemy_ui.update_enemy(
-                self.current_enemy.name,
-                self.current_enemy.hp,
-                self.current_enemy.max_hp
-            )
 
     def enemy_turn(self):
         if not self.current_enemy or not self.current_enemy.is_alive():
             return
 
         if self.player.is_alive():
-            dmg = self.current_enemy.attack
-            self.player.hp -= dmg
-            self.log_message(f"{self.current_enemy.name} 造成 {dmg} 伤害！")
+            # 无敌模式下不受伤
+            if self.god_mode:
+                self.log_message(f"{self.current_enemy.name} 攻击了你，但你毫发无损！")
+            else:
+                dmg = max(1, self.current_enemy.attack - self.player.get_effective_defense() // 2)
+                self.player.hp -= dmg
+                self.log_message(f"{self.current_enemy.name} 造成 {dmg} 伤害！")
+            
             self.update_ui()
-            if not self.player.is_alive():
+            
+            # 更新临时效果
+            self.player.update_temp_effects()
+            
+            if not self.player.is_alive() and not self.god_mode:
                 self.end_battle(victory=False)
 
     def flee_battle(self):
@@ -514,24 +696,73 @@ class RPGGame(QMainWindow):
     def end_battle(self, victory):
         self.in_battle = False
         self.update_ui()
+        
         if victory is True:
+            # 战斗胜利后恢复血量
             self.player.hp = min(self.player.max_hp, self.player.hp + 10)
+            
+            # 检查是否是boss战
+            if hasattr(self.current_enemy, 'is_boss') and self.current_enemy.is_boss:
+                # Boss掉落额外奖励
+                additional_items = create_items()
+                for _ in range(2):
+                    item = random.choice(additional_items)
+                    self.player.inventory.append(item)
+                self.log_message("你击败了boss！获得特殊奖励！")
+            
             self.log_message("战斗胜利！获得 10 HP 恢复。")
             x, y = int(self.game_map.player_x), int(self.game_map.player_y)
             self.game_map.defeat_enemy(x, y)
             self.update_ui()
+        elif victory is None:
+            # 逃跑成功
+            self.log_message("你成功逃离了战斗。")
         elif victory is False:
-            QMessageBox.critical(self, "Game Over", "你倒下了……\n游戏结束！")
+            QMessageBox.critical(self, "游戏结束", "你倒下了……\n游戏结束！")
             sys.exit()
 
     def open_inventory(self):
         """打开背包查看所有道具"""
-        if not self.player.inventory:
-            self.log_message("背包为空！")
-            return
-            
-        dialog = InventoryDialog(self.player.inventory, self)
+        dialog = InventoryDialog(self.player.inventory, self.player, in_battle=False, game=self)
         dialog.exec()
 
+    def open_skill_menu(self):
+        """打开技能菜单"""
+        if not self.player.skills:
+            self.log_message("没有可用技能！")
+            return
+            
+        dialog = SkillDialog(self.player.skills, self.player, self)
+        if dialog.exec() and dialog.selected_skill:
+            self.use_skill(dialog.selected_skill)
+
+    def use_skill(self, skill):
+        """使用选定的技能"""
+        if not skill.can_use(self.player) and not self.god_mode:
+            self.log_message("魔法值不足！")
+            return
+            
+        # 无敌模式下不消耗MP
+        original_mp = self.player.mp
+        msg = skill.use(self.player, self.current_enemy)
+        
+        # 无敌模式下恢复MP
+        if self.god_mode:
+            self.player.mp = original_mp
+            
+        self.log_message(msg)
+        self.update_ui()
+        
+        if self.current_enemy and not self.current_enemy.is_alive():
+            self.end_battle(victory=True)
+            return
+            
+        if self.in_battle:
+            self.enemy_turn()
+
     def log_message(self, msg):
+        """显示消息提示"""
+        # 确保msg是字符串类型
+        if not isinstance(msg, str):
+            msg = str(msg)
         QMessageBox.information(self, "提示", msg)

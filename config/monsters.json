@@ -1,0 +1,45 @@
+{
+  "monsters": [
+    {
+      "type": "goblin",
+      "name": "哥布林",
+      "max_hp": 30,
+      "attack": 8,
+      "defense": 2,
+      "color": "#ff5555"
+    },
+    {
+      "type": "skeleton",
+      "name": "骷髅兵",
+      "max_hp": 40,
+      "attack": 12,
+      "defense": 3,
+      "color": "#ffaa55"
+    },
+    {
+      "type": "spider",
+      "name": "巨蜘蛛",
+      "max_hp": 50,
+      "attack": 15,
+      "defense": 1,
+      "color": "#55ff55"
+    },
+    {
+      "type": "orc",
+      "name": "兽人",
+      "max_hp": 60,
+      "attack": 18,
+      "defense": 4,
+      "color": "#ffcc00"
+    },
+    {
+      "type": "dragon",
+      "name": "火龙",
+      "max_hp": 200,
+      "attack": 30,
+      "defense": 5,
+      "color": "#ff0000",
+      "is_boss": true
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "items": [
+    {
+      "name": "治疗药水",
+      "description": "恢复生命值",
+      "effect": {
+        "type": "heal",
+        "value": 30
+      }
+    },
+    {
+      "name": "魔法药水",
+      "description": "恢复魔法值",
+      "effect": {
+        "type": "restore_mp",
+        "value": 20
+      }
+    },
+    {
+      "name": "力量药水",
+      "description": "临时提升攻击力",
+      "effect": {
+        "type": "buff",
+        "buff_type": "attack",
+        "value": 10,
+        "duration": 3
+      }
+    },
+    {
+      "name": "防御药水",
+      "description": "临时提升防御力",
+      "effect": {
+        "type": "buff",
+        "buff_type": "defense",
+        "value": 5,
+        "duration": 3
+      }
+    },
+    {
+      "name": "虚弱药水",
+      "description": "降低敌人攻击力",
+      "effect": {
+        "type": "debuff",
+        "debuff_type": "attack",
+        "value": 8,
+        "duration": 2
+      }
+    },
+    {
+      "name": "传送卷轴",
+      "description": "随机传送到地图某处",
+      "effect": {
+        "type": "special",
+        "special_type": "teleport",
+        "value": 1
+      }
+    }
+  ]
+}

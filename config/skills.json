@@ -1,0 +1,64 @@
+{
+  "skills": [
+    {
+      "name": "火球术",
+      "mp_cost": 10,
+      "description": "对单个敌人造成伤害",
+      "effect": {
+        "type": "damage",
+        "value": 25
+      }
+    },
+    {
+      "name": "治疗术",
+      "mp_cost": 15,
+      "description": "恢复自身生命值",
+      "effect": {
+        "type": "heal",
+        "value": 40
+      }
+    },
+    {
+      "name": "闪电链",
+      "mp_cost": 20,
+      "description": "对多个敌人造成伤害",
+      "effect": {
+        "type": "multi_target",
+        "value": 30
+      }
+    },
+    {
+      "name": "力量祝福",
+      "mp_cost": 15,
+      "description": "提升自身攻击力",
+      "effect": {
+        "type": "buff",
+        "buff_type": "attack",
+        "value": 10,
+        "duration": 3
+      }
+    },
+    {
+      "name": "防御祝福",
+      "mp_cost": 15,
+      "description": "提升自身防御力",
+      "effect": {
+        "type": "buff",
+        "buff_type": "defense",
+        "value": 5,
+        "duration": 3
+      }
+    },
+    {
+      "name": "虚弱术",
+      "mp_cost": 18,
+      "description": "降低敌人攻击力",
+      "effect": {
+        "type": "debuff",
+        "debuff_type": "attack",
+        "value": 8,
+        "duration": 2
+      }
+    }
+  ]
+}
