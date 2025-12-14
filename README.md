@@ -127,8 +127,6 @@ python src/main.py
 ## 鸣谢
 
 - **PyQt6** - 用于GUI开发
-- **PyInstaller** - 用于打包成exe
-- **PyArmor** - 用于源码保护（可选）
 
 ---
 
