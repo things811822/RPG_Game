@@ -1,4 +1,4 @@
-# RPG冒险游戏 - PyQt6 伪3D RPG游戏
+# RPG冒险游戏 - PyQt6 3D RPG游戏
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=flat&logo=github)](https://github.com/things811822/RPG_Game)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?style=flat&logo=python)
