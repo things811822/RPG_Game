@@ -1,4 +1,3 @@
-# src/systems/utils.py
 WALL = 1
 EMPTY = 0
 
@@ -9,12 +8,22 @@ import sys
 from pathlib import Path
 
 def load_config(filename):
+    """
+    加载配置文件
+    
+    优先级顺序：
+    1. exe 同级目录下的 config/ 文件夹（支持热更新）
+    2. 开发环境的项目根目录 config/ 
+    3. 回退到相对路径（兼容旧逻辑）
+    """
+    # === 方法 1: 优先读取 exe 旁边的 config（支持热更新）===
     if getattr(sys, 'frozen', False):
-        app_dir = Path(sys.executable).parent
+        # PyInstaller 打包后的 exe
+        external_config_path = Path(sys.executable).parent / "config" / filename
     else:
-        app_dir = Path(__file__).resolve().parent.parent.parent
-
-    external_config_path = app_dir / "config" / filename
+        # 开发环境
+        external_config_path = Path(__file__).parent.parent.parent / "config" / filename
+    
     if external_config_path.exists():
         try:
             with open(external_config_path, 'r', encoding='utf-8') as f:
@@ -22,30 +31,26 @@ def load_config(filename):
         except Exception as e:
             print(f"警告: 无法读取外部配置文件 {external_config_path}: {e}")
 
+    # === 方法 2: 回退到原始相对路径逻辑（兼容性）===
+    config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', filename)
     try:
-        if getattr(sys, 'frozen', False):
-            internal_path = Path(getattr(sys, '_MEIPASS')) / "config" / filename
-        else:
-            internal_path = app_dir / "config" / filename
-
-        with open(internal_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"错误: 无法加载配置文件 {filename}: {e}")
+        print(f"加载配置文件 {filename} 失败: {e}")
         return {}
 
 def generate_perfect_maze(size):
+    """
+    生成基于房间的迷宫（100%连通，有房间感）
+    使用递归分割算法
+    """
     # 确保大小为奇数
     if size % 2 == 0:
         size += 1
     
     # 创建全墙网格
     grid = [[WALL for _ in range(size)] for _ in range(size)]
-    
-    # 创建内部通道
-    for i in range(1, size-1):
-        for j in range(1, size-1):
-            grid[i][j] = EMPTY
     
     # 确保边界是墙壁
     for i in range(size):
@@ -54,23 +59,47 @@ def generate_perfect_maze(size):
         grid[i][0] = WALL
         grid[i][size-1] = WALL
     
-    # 使用迭代DFS生成迷宫
-    visited = [[False for _ in range(size)] for _ in range(size)]
-    stack = [(1, 1)]
-    visited[1][1] = True
-    
-    while stack:
-        x, y = stack.pop()
-        directions = [(0, 2), (2, 0), (0, -2), (-2, 0)]
-        random.shuffle(directions)
+    # 递归分割
+    def divide(x, y, width, height):
+        if width < 5 or height < 5:
+            # 创建房间
+            for i in range(x+1, x+width-1):
+                for j in range(y+1, y+height-1):
+                    grid[j][i] = EMPTY
+            return
         
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            if 1 <= nx < size-1 and 1 <= ny < size-1 and not visited[ny][nx] and grid[ny][nx] == EMPTY:
-                # 打通墙壁
-                grid[y + dy//2][x + dx//2] = EMPTY
-                visited[ny][nx] = True
-                stack.append((nx, ny))
+        # 选择分割线
+        divide_x = x + random.randint(2, width-3)
+        divide_y = y + random.randint(2, height-3)
+        
+        # 水平分割
+        if random.random() < 0.5:
+            # 创建水平墙
+            for i in range(x+1, x+width-1):
+                grid[divide_y][i] = WALL
+            
+            # 创建通道
+            passage_x = x + random.randint(1, width-2)
+            grid[divide_y][passage_x] = EMPTY
+            
+            # 递归
+            divide(x, y, width, divide_y-y+1)
+            divide(x, divide_y, width, height-(divide_y-y))
+        else:
+            # 创建垂直墙
+            for j in range(y+1, y+height-1):
+                grid[j][divide_x] = WALL
+            
+            # 创建通道
+            passage_y = y + random.randint(1, height-2)
+            grid[passage_y][divide_x] = EMPTY
+            
+            # 递归
+            divide(x, y, divide_x-x+1, height)
+            divide(divide_x, y, width-(divide_x-x), height)
+    
+    # 初始分割
+    divide(0, 0, size, size)
     
     # 确保入口和出口
     grid[1][1] = EMPTY  # 入口
