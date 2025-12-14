@@ -73,7 +73,6 @@ python src/main.py
 
 ## 游戏界面
 
-![界面说明](screenshots/ui_guide.jpg)
 
 1. **第一人称视图**：显示当前视角的游戏世界
 2. **状态区域**：显示当前关卡和玩家HP/MP
@@ -133,5 +132,4 @@ python src/main.py
 
 ---
 
-> **注意**: 为了更好的游戏体验，建议使用1920x1080或更高分辨率的显示器运行本游戏。  
-> 仓库地址: [https://github.com/things811822/RPG_Game](https://github.com/things811822/RPG_Game)
+> **注意**: 为了更好的游戏体验，建议使用1920x1080或更高分辨率的显示器运行本游戏。
