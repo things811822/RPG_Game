@@ -21,7 +21,7 @@ from .systems.skills import create_skills, check_skill_combo
 from .systems.items import create_items
 from .systems.monsters import create_monster
 
-DEV_MODE_ENABLED = True  # 将此设置为 True 以启用开发者模式
+DEV_MODE_ENABLED = False  # 将此设置为 True 以启用开发者模式
 
 class RPGGame(QMainWindow):
     def __init__(self):
