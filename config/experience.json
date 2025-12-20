@@ -1,0 +1,15 @@
+{
+  "experience": {
+    "goblin": 10,
+    "spider": 8,
+    "skeleton": 15,
+    "zombie": 20,
+    "bat": 5,
+    "slime": 3,
+    "wolf": 12,
+    "giant_spider": 18,
+    "dragon": 100,
+    "giant_dragon": 200,
+    "demon_king": 300
+  }
+}

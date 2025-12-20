@@ -1,24 +1,24 @@
 {
   "items": [
     {
-      "name": "治疗药水",
-      "description": "恢复生命值",
+      "name": "小型治疗药水",
+      "description": "恢复20点HP",
       "effect": {
         "type": "heal",
-        "value": 30
-      }
-    },
-    {
-      "name": "魔法药水",
-      "description": "恢复魔法值",
-      "effect": {
-        "type": "restore_mp",
         "value": 20
       }
     },
     {
+      "name": "魔法药水",
+      "description": "恢复15点MP",
+      "effect": {
+        "type": "restore_mp",
+        "value": 15
+      }
+    },
+    {
       "name": "力量药水",
-      "description": "临时提升攻击力",
+      "description": "临时提升10点攻击力，持续3回合",
       "effect": {
         "type": "buff",
         "buff_type": "attack",
@@ -28,7 +28,7 @@
     },
     {
       "name": "防御药水",
-      "description": "临时提升防御力",
+      "description": "临时提升5点防御力，持续3回合",
       "effect": {
         "type": "buff",
         "buff_type": "defense",
@@ -37,23 +37,47 @@
       }
     },
     {
-      "name": "虚弱药水",
-      "description": "降低敌人攻击力",
+      "name": "经验药水",
+      "description": "永久提升5点最大HP",
       "effect": {
-        "type": "debuff",
-        "debuff_type": "attack",
-        "value": 8,
-        "duration": 2
-      }
+        "type": "permanent",
+        "stat": "max_hp",
+        "value": 5
+      },
+      "boss_reward": true
     },
     {
-      "name": "传送卷轴",
-      "description": "随机传送到地图某处",
+      "name": "神圣武器",
+      "description": "临时提升15点攻击力，持续5回合",
+      "effect": {
+        "type": "buff",
+        "buff_type": "attack",
+        "value": 15,
+        "duration": 5
+      },
+      "boss_reward": true
+    },
+    {
+      "name": "龙鳞护盾",
+      "description": "临时提升10点防御力，持续5回合",
+      "effect": {
+        "type": "buff",
+        "buff_type": "defense",
+        "value": 10,
+        "duration": 5
+      },
+      "boss_reward": true
+    },
+    {
+      "name": "复活石",
+      "description": "死亡时自动复活并恢复50%HP",
       "effect": {
         "type": "special",
-        "special_type": "teleport",
-        "value": 1
-      }
+        "special_type": "revive",
+        "value": 50
+      },
+      "boss_reward": true,
+      "consumable_on_death": true
     }
   ]
 }

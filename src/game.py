@@ -19,9 +19,10 @@ from .ui.enemy_ui import EnemyUI
 from .ui.inventory_dialog import InventoryDialog
 from .systems.skills import create_skills, check_skill_combo
 from .systems.items import create_items
-from .systems.monsters import create_monster
+from .systems.monsters import create_monster, get_monster_config
+from .systems.experience import get_experience_config
 
-DEV_MODE_ENABLED = False  # 将此设置为 True 以启用开发者模式
+DEV_MODE_ENABLED = True  # 将此设置为 True 以启用开发者模式
 
 class RPGGame(QMainWindow):
     def __init__(self):
@@ -89,9 +90,12 @@ class RPGGame(QMainWindow):
         self.hp_label.setStyleSheet("font-size: 13px; color: #ff5555; font-family: 'Microsoft YaHei';")
         self.mp_label = QLabel("💙 MP: 50/50")
         self.mp_label.setStyleSheet("font-size: 13px; color: #55aaff; font-family: 'Microsoft YaHei';")
+        self.exp_label = QLabel("🏆 经验: 0/100")
+        self.exp_label.setStyleSheet("font-size: 12px; color: #55ff55; font-family: 'Microsoft YaHei';")
         status_layout.addWidget(self.level_label)
         status_layout.addWidget(self.hp_label)
         status_layout.addWidget(self.mp_label)
+        status_layout.addWidget(self.exp_label)
         
         # ===== 操作按钮区域 =====
         action_frame = QFrame()
@@ -646,6 +650,7 @@ class RPGGame(QMainWindow):
     def update_ui(self):
         self.hp_label.setText(f"❤️ HP: {self.player.hp}/{self.player.max_hp}")
         self.mp_label.setText(f"💙 MP: {self.player.mp}/{self.player.max_mp}")
+        self.exp_label.setText(f"🏆 经验: {self.player.exp}/{self.player.next_level_exp}")
         self.minimap.render()
         
         if not self.in_battle:
@@ -712,11 +717,28 @@ class RPGGame(QMainWindow):
             return
             
         dialog = InventoryDialog(self.player.inventory, self.player, in_battle=self.in_battle, game=self)
-        if dialog.exec() and dialog.selected_item:
-            self.use_selected_item(dialog.selected_item)
+        dialog.item_used.connect(self.handle_item_used)
+        if dialog.exec():
+            pass  # 逻辑在handle_item_used中处理
+    
+    def handle_item_used(self, item):
+        """处理道具使用"""
+        try:
+            # 使用道具
+            effect_message = self.player.use_item(item)
+            self.log_message(effect_message)
+            
+            # 更新UI
+            self.update_ui()
+            
+            # 如果在战斗中，执行敌人回合
+            if self.in_battle:
+                self.enemy_turn()
+        except Exception as e:
+            self.log_message(f"使用道具时出错: {str(e)}")
     
     def use_selected_item(self, item):
-        """使用选中的道具"""
+        """使用选中的道具（兼容旧逻辑）"""
         if item in self.player.inventory:
             self.player.use_item(item)
             self.log_message(f"使用了 {item.name}！")
@@ -734,6 +756,28 @@ class RPGGame(QMainWindow):
         # 检查是否击败敌人
         if self.current_enemy.hp <= 0:
             self.current_enemy.hp = 0
+            
+            # 增加经验
+            monster_config = get_monster_config(self.current_enemy_spot.enemy_type)
+            experience_config = get_experience_config()
+            exp_gain = experience_config.get(self.current_enemy_spot.enemy_type, 10)
+            gold_gain = monster_config.get('gold', 5)
+            
+            self.player.add_experience(exp_gain)
+            self.player.gold += gold_gain
+            
+            # 更新UI
+            self.update_ui()
+            
+            # 显示经验/金币信息
+            self.log_message(f"获得 {exp_gain} 经验值，{gold_gain} 金币！")
+            
+            # 检查是否升级
+            if self.player.exp >= self.player.next_level_exp:
+                level_up_message = self.player.level_up()
+                self.log_message(level_up_message)
+                self.update_ui()
+            
             self.end_battle(victory=True)
             return f"造成 {dmg} 伤害！敌人被击败！"
         
@@ -778,34 +822,150 @@ class RPGGame(QMainWindow):
     def flee_battle(self):
         """尝试逃跑"""
         if random.random() < 0.7:
-            # 逃跑后随机移动
-            self.random_move_after_flee()
+            # 逃跑后移动到安全位置
+            self.move_to_safe_position()
             self.log_message("你成功逃跑了！")
             self.end_battle(victory=None)
         else:
             self.log_message("逃跑失败！")
             self.enemy_turn()
     
-    def random_move_after_flee(self):
-        """逃跑后随机向一个可移动的方向移动"""
-        x, y = int(self.game_map.player_x), int(self.game_map.player_y)
-        possible_moves = []
+    def move_to_safe_position(self):
+        """移动到安全位置"""
+        safe_x, safe_y = self.find_safe_position_after_flee()
+        current_x = int(self.game_map.player_x)
+        current_y = int(self.game_map.player_y)
         
-        # 检查所有方向
-        if not self.game_map.is_wall(x, y-1):  # 上
-            possible_moves.append((0, -0.5))
-        if not self.game_map.is_wall(x, y+1):  # 下
-            possible_moves.append((0, 0.5))
-        if not self.game_map.is_wall(x-1, y):  # 左
-            possible_moves.append((-0.5, 0))
-        if not self.game_map.is_wall(x+1, y):  # 右
-            possible_moves.append((0.5, 0))
+        # 计算移动向量
+        dx = (safe_x - current_x) * 0.5
+        dy = (safe_y - current_y) * 0.5
         
-        # 随机选择一个方向
-        if possible_moves:
-            dx, dy = random.choice(possible_moves)
-            self.game_map.move_player(dx, dy)
+        # 限制移动距离
+        max_move = 1.5
+        distance = math.sqrt(dx*dx + dy*dy)
+        if distance > max_move and distance > 0:
+            dx = dx * max_move / distance
+            dy = dy * max_move / distance
+        
+        # 执行移动
+        if self.game_map.move_player(dx, dy):
+            self.log_message(f"成功逃跑到安全位置: ({int(self.game_map.player_x)}, {int(self.game_map.player_y)})")
             self.update_ui()
+    
+    def find_safe_position_after_flee(self):
+        """寻找一个安全的逃跑位置"""
+        current_x = int(self.game_map.player_x)
+        current_y = int(self.game_map.player_y)
+        map_size = self.game_map.size
+        
+        # 定义最大搜索范围
+        max_search_range = 5
+        
+        # 存储候选安全位置
+        safe_positions = []
+        
+        # 搜索周围的格子
+        for dx in range(-max_search_range, max_search_range + 1):
+            for dy in range(-max_search_range, max_search_range + 1):
+                nx, ny = current_x + dx, current_y + dy
+                
+                # 检查边界
+                if nx < 1 or nx >= map_size - 1 or ny < 1 or ny >= map_size - 1:
+                    continue
+                
+                # 检查是否是墙
+                if self.game_map.is_wall(nx, ny):
+                    continue
+                
+                # 检查是否有敌人
+                has_enemy = False
+                for enemy in self.game_map.enemies:
+                    if enemy.active and enemy.x == nx and enemy.y == ny:
+                        has_enemy = True
+                        break
+                
+                if has_enemy:
+                    continue
+                
+                # 检查是否有Boss
+                has_boss = False
+                for enemy in self.game_map.enemies:
+                    if enemy.active and enemy.is_boss and enemy.x == nx and enemy.y == ny:
+                        has_boss = True
+                        break
+                
+                if has_boss:
+                    continue
+                
+                # 计算与当前位置的距离和方向
+                distance = math.sqrt(dx*dx + dy*dy)
+                direction = math.atan2(dy, dx)
+                
+                # 优先选择距离适中、远离敌人的位置
+                safe_positions.append((nx, ny, distance, direction))
+        
+        # 按距离排序
+        safe_positions.sort(key=lambda x: x[2])
+        
+        if safe_positions:
+            # 选择最接近的3个安全位置
+            candidate_positions = safe_positions[:min(3, len(safe_positions))]
+            
+            # 优先选择与当前敌人位置相反方向的位置
+            if self.current_enemy_spot:
+                enemy_x, enemy_y = self.current_enemy_spot.x, self.current_enemy_spot.y
+                enemy_dx = enemy_x - current_x
+                enemy_dy = enemy_y - current_y
+                enemy_direction = math.atan2(enemy_dy, enemy_dx)
+                opposite_direction = (enemy_direction + math.pi) % (2 * math.pi)
+                
+                # 选择最接近相反方向的位置
+                best_pos = min(candidate_positions, 
+                              key=lambda x: abs(x[3] - opposite_direction))
+                return best_pos[0], best_pos[1]
+            
+            # 随机选择一个候选位置
+            chosen_pos = random.choice(candidate_positions)
+            return chosen_pos[0], chosen_pos[1]
+        
+        # 没有找到安全位置，尝试使用简单的随机位置
+        return self.find_fallback_position(current_x, current_y)
+    
+    def find_fallback_position(self, current_x, current_y):
+        """当找不到安全位置时的备选方案"""
+        map_size = self.game_map.size
+        possible_positions = []
+        
+        # 检查所有相邻位置
+        for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0),  # 上右下左
+                       (-1, -1), (1, -1), (1, 1), (-1, 1)]:  # 四个对角线
+            nx, ny = current_x + dx, current_y + dy
+            
+            # 检查边界
+            if nx < 1 or nx >= map_size - 1 or ny < 1 or ny >= map_size - 1:
+                continue
+            
+            # 检查是否是墙
+            if self.game_map.is_wall(nx, ny):
+                continue
+            
+            # 检查是否有敌人
+            has_enemy = False
+            for enemy in self.game_map.enemies:
+                if enemy.active and enemy.x == nx and enemy.y == ny:
+                    has_enemy = True
+                    break
+            
+            if has_enemy:
+                continue
+            
+            possible_positions.append((nx, ny))
+        
+        if possible_positions:
+            return random.choice(possible_positions)
+        
+        # 作为最后的备选，返回当前位置
+        return current_x, current_y
     
     def end_battle(self, victory):
         """结束战斗，清理所有战斗相关状态"""
@@ -831,9 +991,16 @@ class RPGGame(QMainWindow):
             if hasattr(self.current_enemy, 'is_boss') and self.current_enemy.is_boss:
                 # Boss掉落额外奖励
                 additional_items = create_items()
-                for _ in range(2):
-                    item = random.choice(additional_items)
-                    self.player.inventory.append(item)
+                boss_rewards = [item for item in additional_items if getattr(item, 'boss_reward', False)]
+                if boss_rewards:
+                    # 随机选择2个Boss奖励
+                    for _ in range(2):
+                        if boss_rewards:
+                            reward = random.choice(boss_rewards)
+                            self.player.inventory.append(reward)
+                            self.log_message(f"获得Boss特殊奖励: {reward.name}！")
+                            # 从列表中移除已选择的奖励，避免重复
+                            boss_rewards.remove(reward)
                 self.log_message("你击败了boss！获得特殊奖励！")
             
             self.log_message("战斗胜利！获得 10 HP 恢复。")

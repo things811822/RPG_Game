@@ -13,6 +13,10 @@ class Player:
         self.attack = 15
         self.defense = 5
         self.luck = 10
+        self.level = 1
+        self.exp = 0
+        self.gold = 0
+        self.next_level_exp = 100
         # 临时属性
         self.temp_attack = 0  # 临时攻击力
         self.temp_defense = 0  # 临时防御力
@@ -20,12 +24,24 @@ class Player:
         self.skills = create_skills()
         self.items = create_items()
         self.inventory = []
+        # 装备
+        self.weapon = None
+        self.armor = None
+        self.accessory = None
         # 用于技能组合
         self.skill_history = []  # 存储最近使用的技能
         # 用于闪电链技能的敌人列表
         self.game_enemies = []
+        # 复活石效果
+        self.has_revive_stone = False
+        self.revive_hp_percent = 0
 
     def is_alive(self):
+        # 检查是否有复活石
+        if self.hp <= 0 and self.has_revive_stone:
+            self.hp = self.max_hp * (self.revive_hp_percent / 100)
+            self.has_revive_stone = False
+            return True
         return self.hp > 0 or getattr(self, 'god_mode', False)
 
     def use_item(self, item):
@@ -34,31 +50,62 @@ class Player:
             # 应用道具效果
             if hasattr(item, 'apply_effect'):
                 # 新式道具系统
-                item.apply_effect(self)
+                return item.apply_effect(self)
             else:
                 # 旧式道具系统
-                item.effect(self)
-                # 如果是临时效果，添加到临时效果列表
-                if hasattr(item, 'effect') and "temporary" in item.effect.__name__:
-                    duration = 3  # 默认持续3回合
-                    # 从道具配置中获取持续时间
-                    for item_config in self.items:
-                        if item_config.name == item.name and hasattr(item_config, 'duration'):
-                            duration = item_config.duration
-                            break
-                    if "strength" in item.effect.__name__:
-                        self.temp_effects.append(("attack", 10, duration))
-                        self.temp_attack += 10
-                    elif "defense" in item.effect.__name__:
-                        self.temp_effects.append(("defense", 5, duration))
-                        self.temp_defense += 5
-            # 从背包移除道具
-            if item in self.inventory:
-                self.inventory.remove(item)
-            return True
+                if hasattr(item, 'effect_type'):
+                    effect_type = item.effect_type
+                else:
+                    effect_type = item.effect.get('type', 'heal')
+                
+                if effect_type == 'heal':
+                    heal_amount = item.effect.get('value', 30)
+                    self.hp = min(self.max_hp, self.hp + heal_amount)
+                    return f"💖 {self.name}使用了{item.name}，恢复 {heal_amount} HP！"
+                elif effect_type == 'restore_mp':
+                    mp_amount = item.effect.get('value', 20)
+                    self.mp = min(self.max_mp, self.mp + mp_amount)
+                    return f"💧 {self.name}使用了{item.name}，恢复 {mp_amount} MP！"
+                elif effect_type == 'buff':
+                    buff_type = item.effect.get('buff_type', 'attack')
+                    buff_value = item.effect.get('value', 10)
+                    duration = item.effect.get('duration', 3)
+                    
+                    if buff_type == 'attack':
+                        self.temp_attack += buff_value
+                        self.temp_effects.append(('attack', buff_value, duration))
+                        return f"✨ {self.name}使用了{item.name}，攻击力提升 {buff_value}，持续 {duration} 回合！"
+                    elif buff_type == 'defense':
+                        self.temp_defense += buff_value
+                        self.temp_effects.append(('defense', buff_value, duration))
+                        return f"🛡️ {self.name}使用了{item.name}，防御力提升 {buff_value}，持续 {duration} 回合！"
+                elif effect_type == 'permanent':
+                    stat = item.effect.get('stat', 'max_hp')
+                    value = item.effect.get('value', 5)
+                    
+                    if stat == 'max_hp':
+                        self.max_hp += value
+                        self.hp = min(self.max_hp, self.hp + value)
+                        return f"⭐ {self.name}使用了{item.name}，最大HP永久提升 {value}！"
+                    elif stat == 'attack':
+                        self.attack += value
+                        return f"⭐ {self.name}使用了{item.name}，攻击力永久提升 {value}！"
+                    elif stat == 'defense':
+                        self.defense += value
+                        return f"⭐ {self.name}使用了{item.name}，防御力永久提升 {value}！"
+                elif effect_type == 'special':
+                    special_type = item.effect.get('special_type', 'revive')
+                    value = item.effect.get('value', 50)
+                    
+                    if special_type == 'revive':
+                        self.has_revive_stone = True
+                        self.revive_hp_percent = value
+                        return f"🔮 {self.name}获得了{item.name}，死亡时将自动复活并恢复 {value}% HP！"
+            
+            return f"✅ {self.name}使用了{item.name}！"
         except Exception as e:
             print(f"使用道具出错: {e}")
-            return False
+            return f"❌ 使用{item.name}时出错: {str(e)}"
 
     def get_effective_attack(self):
         """获取当前有效攻击力（包括临时加成）"""
@@ -98,3 +145,22 @@ class Player:
         self.temp_attack = 0
         self.temp_defense = 0
         self.temp_effects = []
+
+    def add_experience(self, exp):
+        """添加经验值"""
+        self.exp += exp
+        if self.exp >= self.next_level_exp:
+            self.level_up()
+    
+    def level_up(self):
+        """升级"""
+        self.level += 1
+        self.exp -= self.next_level_exp
+        self.next_level_exp = int(self.next_level_exp * 1.5)
+        
+        # 升级奖励 - 按用户要求：每级提升3点攻击力，30点血量上限，并回满生命值
+        self.max_hp += 30
+        self.hp = self.max_hp
+        self.attack += 3
+        
+        return f"🎉 {self.name}升级到{self.level}级！最大HP+30，攻击力+3！"
