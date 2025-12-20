@@ -1,3 +1,4 @@
+# utils.py
 WALL = 1
 EMPTY = 0
 

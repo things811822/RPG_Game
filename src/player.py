@@ -13,44 +13,45 @@ class Player:
         self.attack = 15
         self.defense = 5
         self.luck = 10
-        
         # 临时属性
         self.temp_attack = 0  # 临时攻击力
         self.temp_defense = 0  # 临时防御力
         self.temp_effects = []  # 临时效果列表 [(效果类型, 值, 剩余回合)]
-        
         self.skills = create_skills()
         self.items = create_items()
         self.inventory = []
-        
+        # 用于技能组合
+        self.skill_history = []  # 存储最近使用的技能
         # 用于闪电链技能的敌人列表
         self.game_enemies = []
 
     def is_alive(self):
-        return self.hp > 0
+        return self.hp > 0 or getattr(self, 'god_mode', False)
 
     def use_item(self, item):
         """使用道具"""
         try:
             # 应用道具效果
-            item.effect(self)
-            
-            # 如果是临时效果，添加到临时效果列表
-            if "temporary" in item.effect.__name__:
-                duration = 3  # 默认持续3回合
-                # 从道具配置中获取持续时间
-                for item_config in self.items:
-                    if item_config.name == item.name and hasattr(item_config, 'duration'):
-                        duration = item_config.duration
-                        break
-                
-                if "strength" in item.effect.__name__:
-                    self.temp_effects.append(("attack", 10, duration))
-                    self.temp_attack += 10
-                elif "defense" in item.effect.__name__:
-                    self.temp_effects.append(("defense", 5, duration))
-                    self.temp_defense += 5
-            
+            if hasattr(item, 'apply_effect'):
+                # 新式道具系统
+                item.apply_effect(self)
+            else:
+                # 旧式道具系统
+                item.effect(self)
+                # 如果是临时效果，添加到临时效果列表
+                if hasattr(item, 'effect') and "temporary" in item.effect.__name__:
+                    duration = 3  # 默认持续3回合
+                    # 从道具配置中获取持续时间
+                    for item_config in self.items:
+                        if item_config.name == item.name and hasattr(item_config, 'duration'):
+                            duration = item_config.duration
+                            break
+                    if "strength" in item.effect.__name__:
+                        self.temp_effects.append(("attack", 10, duration))
+                        self.temp_attack += 10
+                    elif "defense" in item.effect.__name__:
+                        self.temp_effects.append(("defense", 5, duration))
+                        self.temp_defense += 5
             # 从背包移除道具
             if item in self.inventory:
                 self.inventory.remove(item)
@@ -72,7 +73,6 @@ class Player:
         new_effects = []
         attack_change = 0
         defense_change = 0
-        
         for effect_type, value, duration in self.temp_effects:
             if duration > 1:
                 new_effects.append((effect_type, value, duration - 1))
@@ -82,13 +82,16 @@ class Player:
                     attack_change -= value
                 elif effect_type == "defense":
                     defense_change -= value
-        
+                elif effect_type == "poison":
+                    self.hp -= value
+                    if self.hp <= 0 and not getattr(self, 'god_mode', False):
+                        return False
         # 应用属性变化
         self.temp_attack += attack_change
         self.temp_defense += defense_change
-        
         # 更新效果列表
         self.temp_effects = new_effects
+        return True
 
     def clear_temp_effects(self):
         """清除所有临时效果"""

@@ -31,15 +31,6 @@
       "attack": 18,
       "defense": 4,
       "color": "#ffcc00"
-    },
-    {
-      "type": "dragon",
-      "name": "火龙",
-      "max_hp": 200,
-      "attack": 30,
-      "defense": 5,
-      "color": "#ff0000",
-      "is_boss": true
     }
   ]
 }

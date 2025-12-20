@@ -40,7 +40,7 @@ class InventoryDialog(QDialog):
             group_layout.addWidget(name_label)
             
             # 道具描述
-            desc_label = QLabel(item.desc)
+            desc_label = QLabel(item.description)
             desc_label.setFont(QFont("Arial", 9))
             desc_label.setWordWrap(True)
             group_layout.addWidget(desc_label)

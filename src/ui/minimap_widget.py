@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import QScrollArea, QWidget, QTableWidget, QVBoxLayout, QFrame, QTableWidgetItem
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QResizeEvent, QLinearGradient, QBrush, QPen
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QResizeEvent, QBrush, QPen
 
 class MinimapWidget(QScrollArea):
+    map_clicked = pyqtSignal(int, int)
+    
     def __init__(self, game_map):
         super().__init__()
         self.game_map = game_map
@@ -22,11 +24,22 @@ class MinimapWidget(QScrollArea):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setStyleSheet("background:#222; gridline-color: #444;")
         
+        # 连接点击事件
+        self.table.cellClicked.connect(self.on_cell_clicked)
+        
         self.content_layout.addWidget(self.table)
-
+    
+    def on_cell_clicked(self, row, column):
+        """处理表格单元格点击事件"""
+        self.map_clicked.emit(column, row)
+    
+    def mousePressEvent(self, event):
+        """处理鼠标点击事件"""
+        super().mousePressEvent(event)
+    
     def resizeEvent(self, event: QResizeEvent):
         """窗口大小变化时自动调整"""
         super().resizeEvent(event)

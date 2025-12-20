@@ -1,0 +1,28 @@
+{
+  "bosses": [
+    {
+      "type": "dragon",
+      "name": "火龙",
+      "description": "古老的火龙，守护着关卡的出口",
+      "max_occurrences": 1,
+      "spawn_level": 10,
+      "is_boss_level": true
+    },
+    {
+      "type": "giant_dragon",
+      "name": "巨龙",
+      "description": "更强大的龙类Boss",
+      "max_occurrences": 1,
+      "spawn_level": 20,
+      "is_boss_level": true
+    },
+    {
+      "type": "demon_king",
+      "name": "恶魔之王",
+      "description": "地狱的统治者，拥有毁灭性力量",
+      "max_occurrences": 1,
+      "spawn_level": 30,
+      "is_boss_level": true
+    }
+  ]
+}

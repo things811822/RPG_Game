@@ -11,7 +11,7 @@
     },
     {
       "name": "治疗术",
-      "mp_cost": 15,
+      "mp_cost": 10,
       "description": "恢复自身生命值",
       "effect": {
         "type": "heal",

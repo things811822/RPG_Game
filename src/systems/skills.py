@@ -104,3 +104,47 @@ def create_skills():
         skills.append(Skill(name, mp_cost, description, effect_config))
     
     return skills
+
+def check_skill_combo(player):
+    """检查技能组合效果"""
+    last_two_skills = player.skill_history[-2:] if len(player.skill_history) >= 2 else []
+    
+    if len(last_two_skills) == 2:
+        skill1, skill2 = last_two_skills
+        
+        # 火球术 + 闪电链 = 超级闪电
+        if "火球术" in skill1.name and "闪电链" in skill2.name:
+            return {
+                "name": "🔥⚡ 超级闪电",
+                "description": "火与电的完美结合！对所有敌人造成50点伤害！",
+                "effect": lambda p, t: (
+                    f"💥 超级闪电对所有敌人造成 50 伤害！" if 
+                    [e.take_damage(50) for e in getattr(p, 'game_enemies', []) if e.is_alive()] else 
+                    "💥 超级闪电没有击中任何敌人！"
+                )
+            }
+        
+        # 治疗术 + 力量祝福 = 圣光护盾
+        elif "治疗术" in skill1.name and "力量祝福" in skill2.name:
+            return {
+                "name": "✨🛡️ 圣光护盾",
+                "description": "治疗与强化的结合，赋予护盾！提升15防御，持续3回合！",
+                "effect": lambda p, t: (
+                    setattr(p, 'temp_defense', p.temp_defense + 15) or 
+                    p.temp_effects.append(('defense', 15, 3)) or
+                    "💫 圣光护盾提升 15 防御力，持续 3 回合！"
+                )
+            }
+        
+        # 虚弱术 + 闪电链 = 麻痹连锁
+        elif "虚弱术" in skill1.name and "闪电链" in skill2.name:
+            return {
+                "name": "⚡⛓️ 麻痹连锁",
+                "description": "削弱敌人防御后释放闪电链，伤害提升25%！",
+                "effect": lambda p, t: (
+                    [e.take_damage(38) for e in getattr(p, 'game_enemies', []) if e.is_alive()] and 
+                    "⚡ 麻痹连锁对所有敌人造成 38 伤害！"
+                )
+            }
+    
+    return None
