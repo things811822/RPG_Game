@@ -21,16 +21,18 @@ def get_monster_types():
 
 def get_boss_types():
     """获取所有Boss类型"""
-    # 从配置文件加载Boss类型
     config_path = get_config_path('boss_config.json')
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        return [boss['type'] for boss in config['bosses']]
-    except Exception as e:
-        print(f"加载Boss配置文件出错: {e}")
-        # 默认Boss类型
-        return ["dragon"]
+    
+    if config_path and Path(config_path).exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            return [boss['type'] for boss in config['bosses']]
+        except Exception as e:
+            print(f"加载Boss配置文件出错: {e}")
+    
+    # 默认Boss类型
+    return ["dragon"]
 
 def get_monster_config(monster_type):
     """获取特定怪物的配置，优先从配置文件加载"""
@@ -45,7 +47,7 @@ def get_monster_config(monster_type):
             for monster in config['monsters']:
                 if monster['type'] == monster_type:
                     return monster
-            # 配置文件存在但没有找到匹配的怪物，打印警告
+            # 配置文件存在但没有找到匹配的怪物
             print(f"警告：配置文件中没有找到怪物类型 '{monster_type}'")
         except Exception as e:
             print(f"加载怪物配置文件出错: {e}")
@@ -163,16 +165,16 @@ def get_default_monster_config(monster_type):
 def get_boss_config(boss_type):
     """获取特定Boss的配置"""
     config_path = get_config_path('boss_config.json')
-    try:
-        if config_path and Path(config_path).exists():
+    
+    if config_path and Path(config_path).exists():
+        try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             for boss in config['bosses']:
                 if boss['type'] == boss_type:
                     return boss
-    except Exception as e:
-        print(f"加载Boss配置文件出错: {e}")
-        pass
+        except Exception as e:
+            print(f"加载Boss配置文件出错: {e}")
     
     # 默认Boss配置
     return get_default_boss_config(boss_type)
@@ -228,13 +230,12 @@ def get_config_path(filename):
         # 开发环境
         base_path = Path(__file__).parent.parent.parent
     
+    # 检查主配置目录
     config_path = base_path / "config" / filename
-    
-    # 检查路径是否存在
     if config_path.exists():
         return str(config_path)
     
-    # 尝试其他可能的路径
+    # 检查其他可能的路径
     possible_paths = [
         Path(__file__).parent.parent.parent.parent / "config" / filename,
         Path(__file__).parent / "config" / filename,

@@ -1,12 +1,11 @@
-# utils.py
-WALL = 1
-EMPTY = 0
-
-import random
 import json
 import os
-import sys
 from pathlib import Path
+import sys
+import random
+
+WALL = 1
+EMPTY = 0
 
 def load_config(filename):
     """
@@ -15,7 +14,7 @@ def load_config(filename):
     优先级顺序：
     1. exe 同级目录下的 config/ 文件夹（支持热更新）
     2. 开发环境的项目根目录 config/ 
-    3. 回退到相对路径（兼容旧逻辑）
+    3. 回退到内嵌资源
     """
     # === 方法 1: 优先读取 exe 旁边的 config（支持热更新）===
     if getattr(sys, 'frozen', False):
@@ -32,14 +31,72 @@ def load_config(filename):
         except Exception as e:
             print(f"警告: 无法读取外部配置文件 {external_config_path}: {e}")
 
-    # === 方法 2: 回退到原始相对路径逻辑（兼容性）===
-    config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', filename)
+    # === 方法 2: 尝试从包内资源读取 ===
+    try:
+        # PyInstaller 打包后
+        if getattr(sys, 'frozen', False):
+            import pkgutil
+            data = pkgutil.get_data(__name__, f"../config/{filename}")
+            if data:
+                return json.loads(data.decode('utf-8'))
+    except Exception as e:
+        pass
+
+    # === 方法 3: 回退到内嵌资源（兼容性）===
+    config_path = Path(__file__).parent / "config" / filename
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         print(f"加载配置文件 {filename} 失败: {e}")
         return {}
+
+def get_config_path(filename):
+    """
+    获取配置文件路径，支持开发环境和打包后的环境
+    
+    优先级顺序：
+    1. PyInstaller打包后，exe同级目录的config/
+    2. 开发环境的src/config/
+    3. 开发环境的config/
+    4. PyInstaller打包后的_temp目录
+    """
+    # 1. 首先尝试exe同级目录的config
+    if getattr(sys, 'frozen', False):
+        # PyInstaller打包后的exe
+        base_path = Path(sys.executable).parent
+    else:
+        # 开发环境
+        base_path = Path(__file__).parent.parent
+    
+    config_path = base_path / "config" / filename
+    if config_path.exists():
+        return str(config_path)
+    
+    # 2. 尝试开发环境的src/config/
+    dev_path = Path(__file__).parent.parent / "config" / filename
+    if dev_path.exists():
+        return str(dev_path)
+    
+    # 3. 尝试开发环境的config/
+    root_path = Path(__file__).parent.parent.parent / "config" / filename
+    if root_path.exists():
+        return str(root_path)
+    
+    # 4. 尝试PyInstaller的_temp目录
+    if getattr(sys, '_MEIPASS', None):
+        temp_path = Path(sys._MEIPASS) / "config" / filename
+        if temp_path.exists():
+            return str(temp_path)
+    
+    # 5. 尝试当前工作目录
+    current_path = Path.cwd() / "config" / filename
+    if current_path.exists():
+        return str(current_path)
+    
+    # 所有路径都不存在
+    print(f"警告：无法找到配置文件 {filename}")
+    return None
 
 def generate_perfect_maze(size):
     """

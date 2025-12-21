@@ -6,8 +6,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 
 class InventoryDialog(QDialog):
-    item_selected = pyqtSignal(object)  # 添加信号
-    item_used = pyqtSignal(object)      # 添加信号
+    item_selected = pyqtSignal(object)  # 信号：当物品被选中
+    item_used = pyqtSignal(object)      # 信号：当物品被使用
 
     def __init__(self, inventory, player, in_battle=False, game=None, parent=None):
         super().__init__(parent)
@@ -57,25 +57,16 @@ class InventoryDialog(QDialog):
         # 按钮区域
         btn_layout = QHBoxLayout()
         
-        # 使用按钮（战斗中可用）
-        if in_battle:
-            self.use_btn = QPushButton("使用 (E)")
-            self.use_btn.setShortcut("E")  # 设置快捷键
-            self.use_btn.clicked.connect(self.use_selected_item)
-            self.use_btn.setEnabled(False)  # 默认禁用，直到选择道具
-            btn_layout.addWidget(self.use_btn)
-        
-        # 装备按钮（非战斗中可用）
-        if not in_battle:
-            self.equip_btn = QPushButton("装备 (E)")
-            self.equip_btn.setShortcut("E")  # 设置快捷键
-            self.equip_btn.clicked.connect(self.equip_selected_item)
-            self.equip_btn.setEnabled(False)  # 默认禁用，直到选择道具
-            btn_layout.addWidget(self.equip_btn)
+        # 使用按钮
+        self.use_btn = QPushButton("使用")
+        self.use_btn.setStyleSheet("background-color: #4a6fa5; color: white;")
+        self.use_btn.clicked.connect(self.use_selected_item)
+        self.use_btn.setEnabled(False)  # 默认禁用，直到选择道具
+        btn_layout.addWidget(self.use_btn)
         
         # 关闭按钮
-        close_btn = QPushButton("关闭 (ESC)")
-        close_btn.setShortcut("ESC")
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet("background-color: #6a4a4a; color: white;")
         close_btn.clicked.connect(self.reject)
         btn_layout.addWidget(close_btn)
         
@@ -111,20 +102,12 @@ class InventoryDialog(QDialog):
     def handle_selection_changed(self):
         """处理道具选择变化"""
         selected_items = self.item_list.selectedItems()
-        has_selection = len(selected_items) > 0
-        
-        if self.in_battle and hasattr(self, 'use_btn'):
-            self.use_btn.setEnabled(has_selection)
-        elif not self.in_battle and hasattr(self, 'equip_btn'):
-            self.equip_btn.setEnabled(has_selection)
+        self.use_btn.setEnabled(len(selected_items) > 0)
     
     def handle_item_double_click(self, item):
         """处理道具双击事件"""
         self.selected_item = item.data(Qt.ItemDataRole.UserRole)
-        if self.in_battle:
-            self.use_selected_item()
-        else:
-            self.equip_selected_item()
+        self.use_selected_item()
     
     def use_selected_item(self):
         """使用选中的道具"""
@@ -135,7 +118,7 @@ class InventoryDialog(QDialog):
         
         self.selected_item = selected_items[0].data(Qt.ItemDataRole.UserRole)
         
-        # 检查道具是否可用
+        # 检查道具是否可使用
         if hasattr(self.selected_item, 'consumable_on_death') and self.selected_item.consumable_on_death:
             # 复活石等特殊道具
             if self.player.hp <= 0:
@@ -143,7 +126,7 @@ class InventoryDialog(QDialog):
                 self.accept()
                 return
         
-        # 发射信号
+        # 发射使用信号
         self.item_used.emit(self.selected_item)
         
         # 从背包中移除道具
@@ -151,16 +134,7 @@ class InventoryDialog(QDialog):
             self.inventory.remove(self.selected_item)
         
         self.update_item_list()
-        self.accept()
-    
-    def equip_selected_item(self):
-        """装备选中的道具"""
-        selected_items = self.item_list.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "警告", "请先选择一个道具")
-            return
         
-        self.selected_item = selected_items[0].data(Qt.ItemDataRole.UserRole)
-        # 这里可以添加装备逻辑
-        self.item_selected.emit(self.selected_item)
-        self.accept()
+        # 非战斗模式下，显示使用效果
+        if not self.in_battle:
+            self.close()

@@ -1,10 +1,11 @@
 import os
 import sys
 import json
+import random
 from pathlib import Path
 from .systems.utils import generate_perfect_maze, ensure_connectivity
-from .systems.monsters import create_monster, get_monster_types, get_boss_config, get_config_path
-import random
+from .systems.monsters import create_monster, get_monster_types, get_boss_config, get_config_path, get_boss_types
+import math
 
 WALL = 1
 EMPTY = 0
@@ -80,22 +81,40 @@ class GameMap:
         self.generate_items_for_normal_level()
 
     def generate_bosses(self):
-        """生成Boss，数量和类型由配置决定"""
-        # 获取Boss配置
-        boss_config = get_boss_config_for_level(self.level)
+        """生成随机Boss，数量和类型由配置决定"""
+        # 获取所有符合条件的Boss
+        available_bosses = self.get_available_bosses()
         
-        # 如果没有Boss配置，返回
-        if not boss_config:
+        # 如果没有可用Boss，返回
+        if not available_bosses:
+            print(f"警告：第{self.level}关没有可用的Boss配置")
             return
         
-        # 生成配置指定数量的Boss
-        for _ in range(boss_config['max_occurrences']):
-            # 在出口附近添加Boss
-            boss_x, boss_y = self.find_boss_position()
-            if boss_x is not None and boss_y is not None:
-                self.enemies.append(EnemySpot(boss_x, boss_y, boss_config['type']))
-                self.boss_present = True
-                print(f"Boss关卡生成: {boss_config['name']} at ({boss_x}, {boss_y})")
+        # 随机选择一个Boss
+        selected_boss = random.choice(available_bosses)
+        
+        # 在出口附近添加Boss
+        boss_x, boss_y = self.find_boss_position()
+        if boss_x is not None and boss_y is not None:
+            self.enemies.append(EnemySpot(boss_x, boss_y, selected_boss['type']))
+            self.boss_present = True
+            print(f"Boss关卡{self.level}生成: {selected_boss['name']} at ({boss_x}, {boss_y})")
+        else:
+            print(f"警告：无法在第{self.level}关找到合适位置生成Boss")
+
+    def get_available_bosses(self):
+        """获取当前关卡可用的Boss列表"""
+        available_bosses = []
+        
+        # 从配置文件获取所有Boss
+        boss_types = get_boss_types()
+        for boss_type in boss_types:
+            boss_config = get_boss_config(boss_type)
+            # 检查Boss是否应该在当前关卡或之前生成
+            if boss_config and self.level >= boss_config.get('spawn_level', 10):
+                available_bosses.append(boss_config)
+        
+        return available_bosses
 
     def find_boss_position(self):
         """寻找Boss的合适位置（在出口附近）"""
@@ -215,17 +234,53 @@ class GameMap:
                 return i.item
         return None
 
-def get_boss_config_for_level(level):
-    """获取当前关卡的Boss配置"""
-    config_path = get_config_path('boss_config.json')
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        for boss in config['bosses']:
-            if level >= boss['spawn_level']:
-                return boss
-    except Exception as e:
-        print(f"加载Boss配置文件出错: {e}")
-        pass
-    
-    return None
+    def add_boss_at_exit(self):
+        """在出口附近添加Boss，用于作弊功能"""
+        # 获取所有可用Boss
+        available_bosses = self.get_available_bosses()
+        if not available_bosses:
+            print("警告：没有可用的Boss类型")
+            return False
+        
+        # 随机选择一个Boss
+        selected_boss = random.choice(available_bosses)
+        
+        # 检查是否已经有Boss
+        boss_count = sum(1 for enemy in self.enemies if enemy.is_boss)
+        if boss_count >= selected_boss.get('max_occurrences', 1):
+            print(f"无法在出口添加Boss: 已达到最大数量 {selected_boss.get('max_occurrences', 1)}")
+            return False
+        
+        # 在出口前2格处放置Boss
+        boss_x = self.exit_point[0] - 2
+        boss_y = self.exit_point[1] - 2
+        if boss_x < 1: boss_x = 1
+        if boss_y < 1: boss_y = 1
+        
+        # 确保Boss位置是空地
+        if self.grid[boss_y][boss_x] == EMPTY:
+            # 检查该位置是否已经有敌人
+            has_enemy = any(enemy.x == boss_x and enemy.y == boss_y for enemy in self.enemies)
+            if not has_enemy:
+                self.enemies.append(EnemySpot(boss_x, boss_y, selected_boss['type']))
+                print(f"成功在出口 ({boss_x}, {boss_y}) 添加Boss: {selected_boss['name']}")
+                self.boss_present = True
+                return True
+        
+        # 找最近的空地
+        for distance in range(1, 6):  # 搜索5格范围
+            for dx in range(-distance, distance + 1):
+                for dy in range(-distance, distance + 1):
+                    nx, ny = boss_x + dx, boss_y + dy
+                    if 1 <= nx < self.size-1 and 1 <= ny < self.size-1:
+                        if self.grid[ny][nx] == EMPTY:
+                            # 检查该位置是否已经有敌人
+                            has_enemy = any(enemy.x == nx and enemy.y == ny for enemy in self.enemies)
+                            if not has_enemy:
+                                self.enemies.append(EnemySpot(nx, ny, selected_boss['type']))
+                                print(f"成功在出口附近 ({nx}, {ny}) 添加Boss: {selected_boss['name']}")
+                                self.boss_present = True
+                                return True
+        
+        print("无法在出口附近添加Boss: 无法找到合适的空地")
+        return False

@@ -4,9 +4,9 @@ import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy,
-    QFrame, QSpacerItem, QScrollArea, QDialog, QCheckBox
+    QFrame, QSpacerItem, QScrollArea, QDialog, QCheckBox, QStackedWidget
 )
-from PyQt6.QtCore import Qt, QTimer, QTime, QPoint
+from PyQt6.QtCore import Qt, QTimer, QTime, QPoint, QSize
 from PyQt6.QtGui import QKeyEvent, QFont, QColor, QLinearGradient, QPalette, QBrush, QPainter
 from src.ui.skill_dialog import SkillDialog
 from src.ui.skill_combo_dialog import SkillComboDialog
@@ -19,8 +19,10 @@ from .ui.enemy_ui import EnemyUI
 from .ui.inventory_dialog import InventoryDialog
 from .systems.skills import create_skills, check_skill_combo
 from .systems.items import create_items
-from .systems.monsters import create_monster, get_monster_config
+from .systems.monsters import create_monster, get_monster_config, get_boss_types, get_boss_config
 from .systems.experience import get_experience_config
+from .ui.start_screen import StartScreen
+from .ui.death_screen import DeathScreen
 
 DEV_MODE_ENABLED = True  # 将此设置为 True 以启用开发者模式
 
@@ -46,14 +48,74 @@ class RPGGame(QMainWindow):
         self.player_dir = 0  # 默认视角J（北/上）- 0度
         # 传送模式
         self.teleport_mode = False
-        # 生成初始地图
-        self.game_map = GameMap(level=self.current_level)
+        # 死亡处理
+        self.player_died = False
+        self.death_timer = QTimer()
+        self.death_timer.setSingleShot(True)
+        self.death_timer.timeout.connect(self.show_start_screen)
         # 设置中心部件
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QHBoxLayout(central)
+        self.central_widget = QStackedWidget()
+        self.setCentralWidget(self.central_widget)
+        
+        # 创建开始界面
+        self.start_screen = StartScreen()
+        # 正确连接信号
+        self.start_screen.start_game_signal.connect(lambda: self.central_widget.setCurrentIndex(1))
+        self.central_widget.addWidget(self.start_screen)
+        
+        # 创建主游戏界面
+        self.main_game_widget = QWidget()
+        self.setup_main_game_ui()
+        self.central_widget.addWidget(self.main_game_widget)
+        
+        # 创建死亡界面
+        self.death_screen = DeathScreen()
+        # 正确连接信号
+        self.death_screen.restart_game_signal.connect(self.restart_game)
+        self.central_widget.addWidget(self.death_screen)
+        
+        # 初始显示开始界面
+        self.central_widget.setCurrentIndex(0)
+        
+        # 确保游戏地图在使用前初始化
+        self.initialize_game_map()
+        
+        # 设置定时器
+        self.move_timer = QTimer(self)
+        self.move_timer.timeout.connect(self.process_movement)
+        self.move_timer.start(33)  # 30FPS
+        
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
+        
+        # 确保窗口大小变化时UI能自适应
+        self.resizeEvent = self.custom_resize_event
+    
+    def initialize_game_map(self):
+        """初始化游戏地图"""
+        try:
+            self.game_map = GameMap(level=self.current_level)
+            if hasattr(self, 'fp_view') and self.fp_view is not None:
+                self.fp_view.game_map = self.game_map
+            if hasattr(self, 'minimap') and self.minimap is not None:
+                self.minimap.game_map = self.game_map
+        except Exception as e:
+            print(f"初始化游戏地图出错: {e}")
+            # 创建默认地图作为回退
+            self.game_map = GameMap(level=self.current_level)
+            if hasattr(self, 'fp_view') and self.fp_view is not None:
+                self.fp_view.game_map = self.game_map
+            if hasattr(self, 'minimap') and self.minimap is not None:
+                self.minimap.game_map = self.game_map
+
+    def setup_main_game_ui(self):
+        """设置主游戏界面UI"""
+        main_layout = QHBoxLayout(self.main_game_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
+        
+        # 首先确保game_map已初始化
+        self.initialize_game_map()
         
         # ===== 主游戏区域 =====
         game_area = QWidget()
@@ -278,17 +340,47 @@ class RPGGame(QMainWindow):
         self.flee_btn.clicked.connect(self.flee_battle)
         self.combo_btn.clicked.connect(self.use_saved_skill_combo)
         self.combo_btn.setVisible(False)
+    
+    def start_game(self):
+        """开始新游戏"""
+        self.player = Player()
+        self.current_level = 1
+        self.in_battle = False
+        self.current_enemy = None
+        self.current_enemy_spot = None
+        self.god_mode = False
+        self.keys_pressed = {'w': False, 'a': False, 's': False, 'd': False}
+        self.move_speed = 0.1
+        self.last_move_time = 0
+        self.move_cooldown = 100
+        self.player_dir = 0
+        self.teleport_mode = False
+        self.player_died = False
         
-        # 设置定时器
-        self.move_timer = QTimer()
-        self.move_timer.timeout.connect(self.process_movement)
-        self.move_timer.start(33)  # 30FPS
+        # 生成新地图
+        self.initialize_game_map()
+        
+        # 显示主游戏界面
+        self.central_widget.setCurrentIndex(1)
+        
+        # 更新UI
         self.update_ui()
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setFocus()
         
-        # 确保窗口大小变化时UI能自适应
-        self.resizeEvent = self.custom_resize_event
+        # 重置焦点
+        self.setFocus()
+    
+    def restart_game(self):
+        """重新开始游戏"""
+        self.central_widget.setCurrentIndex(1)
+        self.start_game()
+    
+    def show_start_screen(self):
+        """显示开始界面"""
+        self.central_widget.setCurrentIndex(0)
+    
+    def show_death_screen(self):
+        """显示死亡界面"""
+        self.central_widget.setCurrentIndex(2)
     
     def handle_minimap_click(self, x, y):
         """处理小地图点击事件"""
@@ -451,12 +543,8 @@ class RPGGame(QMainWindow):
     
     def generate_new_map(self):
         """生成新地图"""
-        self.game_map = GameMap(level=self.current_level)
-        
-        self.fp_view.game_map = self.game_map
-        self.minimap.game_map = self.game_map
-        if DEV_MODE_ENABLED:
-            self.update_dev_info()
+        self.initialize_game_map()
+        self.update_ui()
     
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
@@ -498,7 +586,7 @@ class RPGGame(QMainWindow):
             return
         # 其他控制
         elif key == Qt.Key.Key_E:
-            if self.fp_view.show_exit_prompt:
+            if hasattr(self.fp_view, 'show_exit_prompt') and self.fp_view.show_exit_prompt:
                 self.next_level()
             else:
                 self.pickup_item()
@@ -509,7 +597,7 @@ class RPGGame(QMainWindow):
             event.accept()
             return
         elif key == Qt.Key.Key_Escape:
-            self.close()
+            self.show_start_screen()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -734,6 +822,18 @@ class RPGGame(QMainWindow):
             # 如果在战斗中，执行敌人回合
             if self.in_battle:
                 self.enemy_turn()
+        except Exception as e:
+            self.log_message(f"使用道具时出错: {str(e)}")
+    
+    def handle_item_used_outside_battle(self, item):
+        """处理非战斗模式下道具使用"""
+        try:
+            # 使用道具
+            effect_message = self.player.use_item(item)
+            self.log_message(effect_message)
+            
+            # 更新UI
+            self.update_ui()
         except Exception as e:
             self.log_message(f"使用道具时出错: {str(e)}")
     
@@ -1009,13 +1109,19 @@ class RPGGame(QMainWindow):
             # 逃跑成功
             self.log_message("你成功逃离了战斗。")
         elif victory is False:
-            QMessageBox.critical(self, "游戏结束", "你倒下了……\n游戏结束！")
-            sys.exit()
+            # 玩家死亡
+            self.player_died = True
+            self.death_timer.start(1000)  # 1秒后显示死亡界面
+            self.log_message("菜")
     
     def open_inventory(self):
         """打开背包查看所有道具"""
-        dialog = InventoryDialog(self.player.inventory, self.player, in_battle=False, game=self)
-        dialog.exec()
+        if self.in_battle:
+            self.show_item_selection()
+        else:
+            dialog = InventoryDialog(self.player.inventory, self.player, in_battle=False, game=self)
+            dialog.item_used.connect(self.handle_item_used_outside_battle)
+            dialog.exec()
     
     def open_skill_menu(self):
         """打开技能菜单"""
