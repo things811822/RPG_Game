@@ -55,7 +55,7 @@ python src/main.py
 
 ### 方法二：使用预编译exe（推荐普通用户）
 
-从[Releases页面](https://github.com/things811822/RPG_Game/releases)下载最新版本的exe文件直接运行。
+从[Releases页面](https://github.com/things811822/RPG_Game/releases)下载最新版本的压缩包文件直接运行。
 
 ## 游戏控制
 
@@ -97,6 +97,9 @@ python src/main.py
 
 3. 将 `False` 改为 `True`
 4. 保存并重新运行游戏
+
+> 或者下载带有CheatingMode的压缩包
+> 该功能只有在最新版本提供
 
 启用后会在最底下出现新的面板
 
